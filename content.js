@@ -375,4 +375,4 @@ const domObserver = new MutationObserver(() => {
   }
 })
 
-domObserver.observe(document.body, { childList: true, subtree: true, characterData: true })
+domObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true })

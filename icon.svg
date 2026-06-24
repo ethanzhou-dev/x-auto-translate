@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- The '文' part in Twitter/X classic blue -->
+  <path d="m5 8 6 6" stroke="#1DA1F2"/>
+  <path d="m4 14 6-6 2-3" stroke="#1DA1F2"/>
+  <path d="M2 5h12" stroke="#1DA1F2"/>
+  <path d="M7 2h1" stroke="#1DA1F2"/>
+  
+  <!-- The 'A' part in dark color -->
+  <path d="m22 22-5-10-5 10" stroke="#0F1419"/>
+  <path d="M14 18h6" stroke="#0F1419"/>
+</svg>

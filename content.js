@@ -345,12 +345,38 @@ function hideNativeTranslate (tweet) {
   }
 }
 
+function doAsyncTranslate(textBox, sourceText, entityMap) {
+  if (textBox.dataset.isTranslating === 'true') return;
+  textBox.dataset.isTranslating = 'true';
+  translateText(sourceText).then(result => {
+    if (result && result.translatedText) {
+      if (translationCache.size > 2000) {
+        const firstKey = translationCache.keys().next().value
+        translationCache.delete(firstKey)
+      }
+      translationCache.set(sourceText, result)
+
+      if (!result.detectedLang.startsWith('zh')) {
+        const currentExtracted = extractRichText(textBox).sourceText
+        if (currentExtracted === sourceText) {
+          const richHtml = restoreRichText(result.translatedText, entityMap)
+          injectFakeGrokTranslation(textBox, richHtml, result.detectedLang, true)
+        }
+      }
+    } else {
+      delete textBox.dataset.translatedText
+      textBox.dataset.translationFailTime = Date.now().toString()
+    }
+    delete textBox.dataset.isTranslating;
+  });
+}
+
 function checkAllTweets () {
   if (!settings.enabled) return
   const pageContext = getPageContext()
 
   const tweets = document.querySelectorAll('[data-testid="tweet"]')
-  tweets.forEach(async (tweet) => {
+  tweets.forEach((tweet) => {
     if (tweet.dataset.ignorePluginTranslate === 'true') return
 
     let hasNativeTranslated = false
@@ -396,7 +422,7 @@ function checkAllTweets () {
 
     textBox.dataset.translatedText = sourceText
 
-    const result = await getCachedTranslation(sourceText)
+    const result = translationCache.get(sourceText)
 
     if (result && result.translatedText) {
       if (!result.detectedLang.startsWith('zh')) {
@@ -407,21 +433,13 @@ function checkAllTweets () {
         }
       }
     } else {
-      delete textBox.dataset.translatedText
-      textBox.dataset.translationFailTime = Date.now().toString()
+      doAsyncTranslate(textBox, sourceText, entityMap)
     }
   })
 }
 
-let rafScheduled = false
 const domObserver = new MutationObserver(() => {
-  if (!rafScheduled) {
-    rafScheduled = true
-    requestAnimationFrame(() => {
-      checkAllTweets()
-      rafScheduled = false
-    })
-  }
+  checkAllTweets()
 })
 
 domObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true })

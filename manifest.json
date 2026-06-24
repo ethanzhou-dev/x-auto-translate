@@ -5,10 +5,15 @@
   "description": "在 X 中自动将外语推文和评论翻译为中文。",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "storage"
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "翻译设置"
   },
   "content_scripts": [
     {

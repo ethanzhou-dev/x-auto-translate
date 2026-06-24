@@ -1,4 +1,49 @@
-const targetLang = 'zh-CN';
+let settings = { enabled: true, targetLang: 'zh-CN', onlyComments: false };
+
+async function loadSettings() {
+    settings = await chrome.storage.local.get({ enabled: true, targetLang: 'zh-CN', onlyComments: false });
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local') {
+        if (changes.enabled) settings.enabled = changes.enabled.newValue;
+        if (changes.targetLang) settings.targetLang = changes.targetLang.newValue;
+        if (changes.onlyComments) settings.onlyComments = changes.onlyComments.newValue;
+    }
+});
+
+loadSettings();
+
+function getPageContext() {
+    const urlMatch = window.location.pathname.match(/\/status\/(\d+)/i);
+    return {
+        pageStatusId: urlMatch ? urlMatch[1] : null,
+        isPhotoVideoOverlay: /\/status\/\d+\/(?:photo|video)\//i.test(window.location.pathname)
+    };
+}
+
+function resolveStatusPage(tweet, pageContext) {
+    if (pageContext.isPhotoVideoOverlay) {
+        if (tweet.closest('[role="dialog"]') !== null) return true;
+        return false;
+    }
+    return !!pageContext.pageStatusId;
+}
+
+function checkIsMainTweet(tweet, pageStatusId) {
+    const timeNodes = tweet.querySelectorAll('time');
+    for (const timeEl of timeNodes) {
+        const link = timeEl.closest('a');
+        if (link) {
+            const href = link.getAttribute('href');
+            const match = href ? href.match(/\/status\/(\d+)/i) : null;
+            if (match) {
+                return match[1] === pageStatusId;
+            }
+        }
+    }
+    return !!tweet.querySelector('article');
+}
 
 const langMap = {
     'en': '英语', 'ja': '日语', 'ko': '韩语', 'fr': '法语', 'de': '德语',
@@ -15,7 +60,7 @@ function getLangName(code) {
 
 async function translateText(text) {
     return new Promise((resolve) => {
-        chrome.runtime.sendMessage({ action: 'translate', text: text, targetLang: targetLang }, (response) => {
+        chrome.runtime.sendMessage({ action: 'translate', text: text, targetLang: settings.targetLang }, (response) => {
             if (response && response.success) {
                 const data = response.data;
                 let translatedText = '';
@@ -113,9 +158,24 @@ function injectFakeGrokTranslation(textBox, translatedText, detectedLang) {
 }
 
 const visibilityObserver = new IntersectionObserver((entries) => {
+    if (!settings.enabled) return;
+    
+    const pageContext = getPageContext();
+
     entries.forEach(async entry => {
         if (entry.isIntersecting) {
             const tweet = entry.target;
+
+            if (settings.onlyComments) {
+                const isStatusPage = resolveStatusPage(tweet, pageContext);
+                if (!isStatusPage) return; // 不在详情页，说明是主页时间线，跳过
+                
+                if (pageContext.pageStatusId) {
+                    const isMainTweet = checkIsMainTweet(tweet, pageContext.pageStatusId);
+                    if (isMainTweet) return; // 是详情页的主推文，跳过
+                }
+            }
+            
             const textBox = tweet.querySelector('[data-testid="tweetText"]');
             if (!textBox) return;
             

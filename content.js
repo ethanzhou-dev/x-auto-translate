@@ -101,7 +101,7 @@ function injectFakeGrokTranslation(textBox, translatedText, detectedLang) {
     
     // 使用谷歌官方的彩色 G 图标
     const iconSvg = `
-        <svg viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; margin-right: 4px;">
+        <svg viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; margin-right: 4px; flex-shrink: 0;">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
             <path d="M5.84 14.09a6.6 6.6 0 0 1 0-4.18V7.07H2.18A11 11 0 0 0 1 12c0 1.78.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"></path>
@@ -109,10 +109,20 @@ function injectFakeGrokTranslation(textBox, translatedText, detectedLang) {
         </svg>
     `;
 
+    const translatedStateHtml = `
+        <span>翻译自 ${langName}</span>
+        <span class="action-btn" data-action="show-original" style="color: rgb(29, 155, 240); cursor: pointer; margin-left: 4px;">显示原文</span>
+    `;
+
+    const originalStateHtml = `
+        <span class="action-btn" data-action="show-translation" style="color: rgb(29, 155, 240); cursor: pointer;">翻译推文</span>
+    `;
+
     header.innerHTML = `
         ${iconSvg}
-        <span>翻译自 ${langName}</span>
-        <span class="show-original-btn" style="color: rgb(29, 155, 240); cursor: pointer; margin-left: 4px;">显示原文</span>
+        <div class="header-text-wrapper" style="display: flex; align-items: center;">
+            ${translatedStateHtml}
+        </div>
     `;
     
     const content = document.createElement('div');
@@ -132,28 +142,21 @@ function injectFakeGrokTranslation(textBox, translatedText, detectedLang) {
     textBox.parentElement.insertBefore(container, textBox);
     textBox.style.display = 'none';
 
-    const restoreBtn = document.createElement('div');
-    restoreBtn.style.color = 'rgb(29, 155, 240)';
-    restoreBtn.style.fontSize = '13px'; 
-    restoreBtn.style.fontFamily = xFontFamily;
-    restoreBtn.style.cursor = 'pointer';
-    restoreBtn.style.marginTop = '4px';
-    restoreBtn.innerText = '翻译推文';
-    restoreBtn.style.display = 'none'; 
-    textBox.parentElement.insertBefore(restoreBtn, textBox.nextSibling);
-
-    const btn = header.querySelector('.show-original-btn');
+    const wrapper = header.querySelector('.header-text-wrapper');
     
-    btn.addEventListener('click', () => {
-        container.style.display = 'none';
-        textBox.style.display = ''; 
-        restoreBtn.style.display = '';
-    });
-
-    restoreBtn.addEventListener('click', () => {
-        textBox.style.display = 'none';
-        container.style.display = '';
-        restoreBtn.style.display = 'none';
+    wrapper.addEventListener('click', (e) => {
+        const btn = e.target.closest('.action-btn');
+        if (!btn) return;
+        
+        if (btn.dataset.action === 'show-original') {
+            content.style.display = 'none';
+            textBox.style.display = ''; 
+            wrapper.innerHTML = originalStateHtml;
+        } else if (btn.dataset.action === 'show-translation') {
+            textBox.style.display = 'none';
+            content.style.display = '';
+            wrapper.innerHTML = translatedStateHtml;
+        }
     });
 }
 
@@ -174,6 +177,56 @@ async function getCachedTranslation(text) {
     return result;
 }
 
+function hideNativeTranslate(tweet) {
+    const buttons = tweet.querySelectorAll('[role="button"], span');
+    for (let btn of buttons) {
+        const text = btn.innerText || btn.textContent;
+        if (!text) continue;
+        
+        const cleanText = text.trim();
+        if (
+            cleanText === 'Translate post' || 
+            cleanText === '翻译推文' || 
+            cleanText === '翻译贴文' || 
+            cleanText === '显示翻译' ||
+            cleanText === 'Show translation' ||
+            cleanText.includes('Translate with Grok') ||
+            cleanText.includes('用 Grok 翻译') ||
+            (cleanText.includes('Grok') && cleanText.includes('翻译')) ||
+            (cleanText.includes('Grok') && cleanText.includes('Translate'))
+        ) {
+            // 绝对不能误伤我们自己注入的容器
+            if (btn.closest('.x-auto-translate-container')) continue;
+            if (btn.classList.contains('show-original-btn') || btn.classList.contains('action-btn')) continue;
+            
+            let target = btn;
+            const parentBtn = btn.closest('[role="button"]') || btn.closest('a');
+            if (parentBtn) {
+                target = parentBtn;
+            } else {
+                // 如果没有明确的 button/a 容器，往上找最多 3 层，寻找包含 SVG 图标的最近父级容器（这样能把那个 Grok 图标一起干掉）
+                let curr = btn;
+                let foundWrapper = btn;
+                for (let i = 0; i < 3; i++) {
+                    curr = curr.parentElement;
+                    if (!curr) break;
+                    if (curr.querySelector('svg') && (curr.innerText || curr.textContent).length < 30) {
+                        foundWrapper = curr;
+                        break;
+                    }
+                }
+                target = foundWrapper;
+                // 防止误伤包含大量文本的父容器
+                if ((target.innerText || target.textContent).length > 30) {
+                    target = btn.parentElement || btn;
+                }
+            }
+            
+            target.style.display = 'none';
+        }
+    }
+}
+
 function checkAllTweets() {
     if (!settings.enabled) return;
     const pageContext = getPageContext();
@@ -182,14 +235,12 @@ function checkAllTweets() {
     tweets.forEach(async (tweet) => {
         if (settings.onlyComments) {
             const isStatusPage = resolveStatusPage(tweet, pageContext);
-            if (!isStatusPage) return; // 不在详情页，说明是主页时间线，跳过
-            
-            if (pageContext.pageStatusId) {
-                const isMainTweet = checkIsMainTweet(tweet, pageContext.pageStatusId);
-                if (isMainTweet) return; // 是详情页的主推文，跳过
-            }
+            // 只要不是详情页（即在主时间线），就跳过。进入详情页后，包括主推文和下方的评论都进行翻译。
+            if (!isStatusPage) return; 
         }
         
+        hideNativeTranslate(tweet); // 隐藏原生翻译按钮
+
         const textBox = tweet.querySelector('[data-testid="tweetText"]');
         if (!textBox) return;
         

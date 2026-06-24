@@ -45,17 +45,16 @@ function checkIsMainTweet(tweet, pageStatusId) {
     return !!tweet.querySelector('article');
 }
 
-const langMap = {
-    'en': '英语', 'ja': '日语', 'ko': '韩语', 'fr': '法语', 'de': '德语',
-    'es': '西班牙语', 'ru': '俄语', 'it': '意大利语', 'pt': '葡萄牙语',
-    'ar': '阿拉伯语', 'th': '泰语', 'vi': '越南语', 'id': '印尼语',
-    'tr': '土耳其语', 'hi': '印地语', 'nl': '荷兰语', 'pl': '波兰语'
-};
-
 function getLangName(code) {
     if (!code) return '未知语言';
     const shortCode = code.split('-')[0].toLowerCase();
-    return langMap[shortCode] || '未知语言';
+    
+    try {
+        const languageNames = new Intl.DisplayNames(['zh-CN'], { type: 'language' });
+        return languageNames.of(shortCode);
+    } catch (e) {
+        return '未知语言';
+    }
 }
 
 function escapeHtml(unsafe) {

@@ -49,22 +49,18 @@ function checkIsMainTweet (tweet, pageStatusId) {
     isMain = !!tweet.querySelector('article')
   }
 
-  // 如果判断为当前主推文，检查它是否实际上是一条“回复”（即点进来的评论）
   if (isMain) {
-    // 1. 检查页面主列中是否有在它之前的推文（说明它是跟在父推文后面的评论）
     const article = tweet.closest('article')
     const primaryColumn = tweet.closest('[data-testid="primaryColumn"]')
     if (article && primaryColumn) {
       const allArticles = Array.from(primaryColumn.querySelectorAll('article'))
-      // 过滤掉嵌套的引用推文，只比较顶层推文
       const topArticles = allArticles.filter(a => !a.parentElement.closest('article'))
 
       if (topArticles.length > 0 && topArticles[0] !== article) {
-        return false // 不是第一条推文，说明它是评论
+        return false
       }
     }
 
-    // 2. 检查是否有明确的 "Replying to @xxx" 文本（当父推文被折叠时）
     const tweetText = tweet.querySelector('[data-testid="tweetText"]')
     if (tweetText) {
       let curr = tweetText
@@ -80,7 +76,7 @@ function checkIsMainTweet (tweet, pageStatusId) {
               if (prev.tagName.toUpperCase() === 'A') aTags.push(prev)
               for (const a of aTags) {
                 if (a.textContent.trim().startsWith('@')) {
-                  return false // 有回复标记，说明是评论
+                  return false
                 }
               }
             }
@@ -425,4 +421,3 @@ const domObserver = new MutationObserver(() => {
 })
 
 domObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true })
-/* global chrome, Node, MutationObserver, requestAnimationFrame */

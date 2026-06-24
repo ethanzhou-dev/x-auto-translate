@@ -8,7 +8,7 @@ async function getEdgeToken () {
   try {
     const res = await fetch('https://edge.microsoft.com/translate/auth')
     edgeAuthToken = await res.text()
-    tokenExpiration = Date.now() + 9 * 60 * 1000 // 9 minutes
+    tokenExpiration = Date.now() + 9 * 60 * 1000
     return edgeAuthToken
   } catch (err) {
     console.error('Failed to get Edge token:', err)

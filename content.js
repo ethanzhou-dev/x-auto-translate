@@ -110,7 +110,7 @@ function extractRichText (textBox) {
 
 function restoreRichText (translatedText, entityMap) {
   const escapedText = escapeHtml(translatedText)
-  return escapedText.replace(/__X_TRANSLATE_(\d+)__/gi, (match, p1, offset, string) => {
+  return escapedText.replace(/__\s*X_TRANSLATE_(\d+)\s*__/gi, (match, p1, offset, string) => {
     const index = parseInt(p1, 10)
     if (entityMap[index]) {
       const entity = entityMap[index]
@@ -141,13 +141,18 @@ async function translateText (text) {
       }
       if (response && response.success) {
         const data = response.data
-        let translatedText = ''
-        if (data && data[0]) {
-          data[0].forEach(item => {
-            if (item[0]) translatedText += item[0]
+        if (data && data.responseData && data.responseData.translatedText) {
+          if (data.responseData.translatedText === 'PLEASE SELECT TWO DISTINCT LANGUAGES' || data.responseStatus === 403 || data.responseStatus === '403') {
+            resolve(null)
+            return
+          }
+          resolve({ 
+            translatedText: data.responseData.translatedText, 
+            detectedLang: data.responseData.detectedLanguage || 'unknown' 
           })
+        } else {
+          resolve(null)
         }
-        resolve({ translatedText, detectedLang: data[2] })
       } else {
         resolve(null)
       }

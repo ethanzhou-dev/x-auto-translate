@@ -281,28 +281,25 @@ function hideNativeTranslate (tweet) {
       if (btn.closest('.x-auto-translate-container')) continue
       if (btn.classList.contains('action-btn')) continue
 
-      let target = btn
-      const parentBtn = btn.closest('[role="button"]') || btn.closest('a')
-      if (parentBtn) {
-        target = parentBtn
-      } else {
-        let curr = btn
-        let foundWrapper = btn
-        for (let i = 0; i < 3; i++) {
-          curr = curr.parentElement
-          if (!curr) break
-          if (curr.querySelector('svg') && (curr.innerText || curr.textContent).length < 30) {
-            foundWrapper = curr
-            break
-          }
-        }
-        target = foundWrapper
-        if ((target.innerText || target.textContent).length > 30) {
-          target = btn.parentElement || btn
+      let target = btn.closest('[role="button"]') || btn.closest('a') || btn
+      
+      let curr = target
+      const targetText = (target.innerText || target.textContent).trim()
+      
+      // 向上查找包含 SVG 的父级容器（只要文本内容一致，说明只是包裹层）
+      for (let i = 0; i < 4; i++) {
+        const parent = curr.parentElement
+        if (!parent || parent === tweet) break
+        
+        const parentText = (parent.innerText || parent.textContent).trim()
+        if (parentText === targetText) {
+          curr = parent
+        } else {
+          break
         }
       }
 
-      target.style.display = 'none'
+      curr.style.display = 'none'
     }
   }
 }

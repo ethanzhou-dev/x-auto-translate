@@ -364,12 +364,15 @@ function checkAllTweets () {
   })
 }
 
-let debounceTimer = null
+let rafScheduled = false
 const domObserver = new MutationObserver(() => {
-  if (debounceTimer) clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(() => {
-    checkAllTweets()
-  }, 300)
+  if (!rafScheduled) {
+    rafScheduled = true
+    requestAnimationFrame(() => {
+      checkAllTweets()
+      rafScheduled = false
+    })
+  }
 })
 
 domObserver.observe(document.body, { childList: true, subtree: true, characterData: true })

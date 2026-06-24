@@ -31,6 +31,7 @@ function resolveStatusPage (tweet, pageContext) {
 }
 
 function checkIsMainTweet (tweet, pageStatusId) {
+  let isMain = false
   const timeNodes = tweet.querySelectorAll('time')
   for (const timeEl of timeNodes) {
     const link = timeEl.closest('a')
@@ -38,11 +39,60 @@ function checkIsMainTweet (tweet, pageStatusId) {
       const href = link.getAttribute('href')
       const match = href ? href.match(/\/status\/(\d+)/i) : null
       if (match) {
-        return match[1] === pageStatusId
+        isMain = match[1] === pageStatusId
+        break
       }
     }
   }
-  return !!tweet.querySelector('article')
+
+  if (!isMain && timeNodes.length === 0) {
+    isMain = !!tweet.querySelector('article')
+  }
+
+  // 如果判断为当前主推文，检查它是否实际上是一条“回复”（即点进来的评论）
+  if (isMain) {
+    // 1. 检查页面主列中是否有在它之前的推文（说明它是跟在父推文后面的评论）
+    const article = tweet.closest('article')
+    const primaryColumn = tweet.closest('[data-testid="primaryColumn"]')
+    if (article && primaryColumn) {
+      const allArticles = Array.from(primaryColumn.querySelectorAll('article'))
+      // 过滤掉嵌套的引用推文，只比较顶层推文
+      const topArticles = allArticles.filter(a => !a.parentElement.closest('article'))
+
+      if (topArticles.length > 0 && topArticles[0] !== article) {
+        return false // 不是第一条推文，说明它是评论
+      }
+    }
+
+    // 2. 检查是否有明确的 "Replying to @xxx" 文本（当父推文被折叠时）
+    const tweetText = tweet.querySelector('[data-testid="tweetText"]')
+    if (tweetText) {
+      let curr = tweetText
+      for (let i = 0; i < 4; i++) {
+        if (!curr) break
+        let prev = curr.previousElementSibling
+        while (prev) {
+          const isUserName = prev.getAttribute('data-testid') === 'User-Name' || prev.querySelector('[data-testid="User-Name"]')
+          if (!isUserName) {
+            const textContent = (prev.innerText || prev.textContent).trim()
+            if (textContent.includes('@') && textContent.length < 50) {
+              const aTags = Array.from(prev.querySelectorAll('a'))
+              if (prev.tagName.toUpperCase() === 'A') aTags.push(prev)
+              for (const a of aTags) {
+                if (a.textContent.trim().startsWith('@')) {
+                  return false // 有回复标记，说明是评论
+                }
+              }
+            }
+          }
+          prev = prev.previousElementSibling
+        }
+        curr = curr.parentElement
+      }
+    }
+  }
+
+  return isMain
 }
 
 function getLangName (code) {
@@ -141,14 +191,12 @@ async function translateText (text) {
       }
       if (response && response.success) {
         const data = response.data
-        if (data && data.responseData && data.responseData.translatedText) {
-          if (data.responseData.translatedText === 'PLEASE SELECT TWO DISTINCT LANGUAGES' || data.responseStatus === 403 || data.responseStatus === '403') {
-            resolve(null)
-            return
-          }
-          resolve({ 
-            translatedText: data.responseData.translatedText, 
-            detectedLang: data.responseData.detectedLanguage || 'unknown' 
+        if (data && data[0] && data[0].translations && data[0].translations.length > 0) {
+          const translatedText = data[0].translations[0].text
+          const detectedLang = data[0].detectedLanguage ? data[0].detectedLanguage.language : 'unknown'
+          resolve({
+            translatedText,
+            detectedLang
           })
         } else {
           resolve(null)
@@ -161,7 +209,10 @@ async function translateText (text) {
 }
 
 function injectFakeGrokTranslation (textBox, translatedText, detectedLang, isHtml = false) {
-  if (textBox.dataset.hasFakeTranslation === 'true') return
+  if (textBox.parentElement) {
+    const existingContainers = textBox.parentElement.querySelectorAll('.x-auto-translate-container')
+    existingContainers.forEach(c => c.remove())
+  }
   textBox.dataset.hasFakeTranslation = 'true'
 
   const container = document.createElement('div')
@@ -281,15 +332,15 @@ function hideNativeTranslate (tweet) {
       if (btn.closest('.x-auto-translate-container')) continue
       if (btn.classList.contains('action-btn')) continue
 
-      let target = btn.closest('[role="button"]') || btn.closest('a') || btn
-      
+      const target = btn.closest('[role="button"]') || btn.closest('a') || btn
+
       let curr = target
       const targetText = (target.innerText || target.textContent).trim()
-      
+
       for (let i = 0; i < 4; i++) {
         const parent = curr.parentElement
         if (!parent || parent === tweet) break
-        
+
         const parentText = (parent.innerText || parent.textContent).trim()
         if (parentText === targetText) {
           curr = parent
@@ -374,3 +425,4 @@ const domObserver = new MutationObserver(() => {
 })
 
 domObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true })
+/* global chrome, Node, MutationObserver, requestAnimationFrame */

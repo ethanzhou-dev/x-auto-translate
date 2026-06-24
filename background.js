@@ -1,12 +1,45 @@
+let edgeAuthToken = null
+let tokenExpiration = 0
+
+async function getEdgeToken () {
+  if (edgeAuthToken && Date.now() < tokenExpiration) {
+    return edgeAuthToken
+  }
+  try {
+    const res = await fetch('https://edge.microsoft.com/translate/auth')
+    edgeAuthToken = await res.text()
+    tokenExpiration = Date.now() + 9 * 60 * 1000 // 9 minutes
+    return edgeAuthToken
+  } catch (err) {
+    console.error('Failed to get Edge token:', err)
+    return null
+  }
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'translate') {
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(request.text)}&langpair=Autodetect|${request.targetLang}&de=x-auto-translate-user@example.com`
+    (async () => {
+      try {
+        const token = await getEdgeToken()
+        if (!token) throw new Error('No auth token')
 
-    fetch(url)
-      .then(res => res.json())
-      .then(data => sendResponse({ success: true, data }))
-      .catch(err => sendResponse({ success: false, error: err.toString() }))
+        const targetLang = request.targetLang === 'zh-CN' ? 'zh-Hans' : request.targetLang
 
+        const res = await fetch(`https://api-edge.cognitive.microsofttranslator.com/translate?api-version=3.0&to=${targetLang}`, {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer ' + token,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify([{ Text: request.text }])
+        })
+
+        const data = await res.json()
+        sendResponse({ success: true, data })
+      } catch (err) {
+        sendResponse({ success: false, error: err.toString() })
+      }
+    })()
     return true
   }
 })

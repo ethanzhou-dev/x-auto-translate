@@ -8,6 +8,10 @@
     "scripting",
     "storage"
   ],
+  "host_permissions": [
+    "*://edge.microsoft.com/*",
+    "*://*.cognitive.microsofttranslator.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },

@@ -122,17 +122,7 @@ function extractRichText (textBox) {
       sourceText += node.textContent
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const tag = node.tagName.toUpperCase()
-      if (tag === 'IMG' && node.src && node.src.includes('emoji')) {
-        const marker = `__X_TRANSLATE_${entityIndex}__`
-        sourceText += marker
-        entityMap[entityIndex] = node.outerHTML
-        entityIndex++
-      } else if (tag === 'A') {
-        const marker = `__X_TRANSLATE_${entityIndex}__`
-        sourceText += marker
-        entityMap[entityIndex] = node.outerHTML
-        entityIndex++
-      } else if (tag === 'BR') {
+      if (tag === 'BR') {
         sourceText += '\n'
       } else if (tag === 'SPAN' || tag === 'DIV') {
         for (const child of node.childNodes) {
@@ -308,6 +298,11 @@ async function getCachedTranslation (text) {
 }
 
 function hideNativeTranslate (tweet) {
+  const textContent = tweet.textContent || ''
+  if (!/Translate|翻译|翻譯/.test(textContent)) {
+    return
+  }
+
   const buttons = tweet.querySelectorAll('[role="button"], span')
   for (const btn of buttons) {
     const text = btn.innerText || btn.textContent
@@ -359,13 +354,16 @@ function checkAllTweets () {
     if (tweet.dataset.ignorePluginTranslate === 'true') return
 
     let hasNativeTranslated = false
-    const spans = tweet.querySelectorAll('[role="button"], span')
-    for (const el of spans) {
-      const txt = (el.innerText || el.textContent).trim()
-      if (txt === '显示原文' || txt === '顯示原文' || txt === 'Show original') {
-        if (!el.classList.contains('action-btn') && !el.closest('.x-auto-translate-container')) {
-          hasNativeTranslated = true
-          break
+    const textContent = tweet.textContent || ''
+    if (textContent.includes('显示原文') || textContent.includes('顯示原文') || textContent.includes('Show original')) {
+      const spans = tweet.querySelectorAll('[role="button"], span')
+      for (const el of spans) {
+        const txt = (el.innerText || el.textContent).trim()
+        if (txt === '显示原文' || txt === '顯示原文' || txt === 'Show original') {
+          if (!el.classList.contains('action-btn') && !el.closest('.x-auto-translate-container')) {
+            hasNativeTranslated = true
+            break
+          }
         }
       }
     }
@@ -393,6 +391,9 @@ function checkAllTweets () {
     if (!sourceText || sourceText.trim() === '') return
 
     if (textBox.dataset.translatedText === sourceText) return
+    const failTime = parseInt(textBox.dataset.translationFailTime || '0', 10)
+    if (Date.now() - failTime < 10000) return // Wait 10 seconds before retrying on failure
+
     textBox.dataset.translatedText = sourceText
 
     const result = await getCachedTranslation(sourceText)
@@ -405,6 +406,9 @@ function checkAllTweets () {
           injectFakeGrokTranslation(textBox, richHtml, result.detectedLang, true)
         }
       }
+    } else {
+      delete textBox.dataset.translatedText
+      textBox.dataset.translationFailTime = Date.now().toString()
     }
   })
 }

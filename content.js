@@ -157,66 +157,72 @@ function injectFakeGrokTranslation(textBox, translatedText, detectedLang) {
     });
 }
 
-const visibilityObserver = new IntersectionObserver((entries) => {
+const translationCache = new Map();
+
+async function getCachedTranslation(text) {
+    if (translationCache.has(text)) {
+        return translationCache.get(text);
+    }
+    const result = await translateText(text);
+    if (result) {
+        if (translationCache.size > 2000) {
+            const firstKey = translationCache.keys().next().value;
+            translationCache.delete(firstKey);
+        }
+        translationCache.set(text, result);
+    }
+    return result;
+}
+
+function checkAllTweets() {
     if (!settings.enabled) return;
-    
     const pageContext = getPageContext();
 
-    entries.forEach(async entry => {
-        if (entry.isIntersecting) {
-            const tweet = entry.target;
-
-            if (settings.onlyComments) {
-                const isStatusPage = resolveStatusPage(tweet, pageContext);
-                if (!isStatusPage) return; // 不在详情页，说明是主页时间线，跳过
-                
-                if (pageContext.pageStatusId) {
-                    const isMainTweet = checkIsMainTweet(tweet, pageContext.pageStatusId);
-                    if (isMainTweet) return; // 是详情页的主推文，跳过
-                }
-            }
-            
-            const textBox = tweet.querySelector('[data-testid="tweetText"]');
-            if (!textBox) return;
-            
-            const text = textBox.innerText || textBox.textContent;
-            if (!text || text.trim() === '') return;
-
-            if (textBox.dataset.translatedText === text) return;
-            textBox.dataset.translatedText = text; 
-
-            const result = await translateText(text);
-            
-            if (result && result.translatedText) {
-                if (!result.detectedLang.startsWith('zh')) {
-                    const currentText = textBox.innerText || textBox.textContent;
-                    if (currentText === text) {
-                        injectFakeGrokTranslation(textBox, result.translatedText, result.detectedLang);
-                    }
-                }
-            }
-        }
-    });
-}, { root: null, rootMargin: '150px', threshold: 0.1 });
-
-const domObserver = new MutationObserver(() => {
     const tweets = document.querySelectorAll('[data-testid="tweet"]');
-    tweets.forEach(tweet => {
-        if (!tweet.dataset.translateObserved) {
-            tweet.dataset.translateObserved = "true";
-            visibilityObserver.observe(tweet);
+    tweets.forEach(async (tweet) => {
+        if (settings.onlyComments) {
+            const isStatusPage = resolveStatusPage(tweet, pageContext);
+            if (!isStatusPage) return; // 不在详情页，说明是主页时间线，跳过
+            
+            if (pageContext.pageStatusId) {
+                const isMainTweet = checkIsMainTweet(tweet, pageContext.pageStatusId);
+                if (isMainTweet) return; // 是详情页的主推文，跳过
+            }
+        }
+        
+        const textBox = tweet.querySelector('[data-testid="tweetText"]');
+        if (!textBox) return;
+        
+        const text = textBox.innerText || textBox.textContent;
+        if (!text || text.trim() === '') return;
+
+        if (textBox.dataset.translatedText === text) return;
+        textBox.dataset.translatedText = text; 
+
+        const result = await getCachedTranslation(text);
+        
+        if (result && result.translatedText) {
+            if (!result.detectedLang.startsWith('zh')) {
+                const currentText = textBox.innerText || textBox.textContent;
+                if (currentText === text) {
+                    injectFakeGrokTranslation(textBox, result.translatedText, result.detectedLang);
+                }
+            }
         }
     });
+}
+
+let rafScheduled = false;
+const domObserver = new MutationObserver(() => {
+    if (!rafScheduled) {
+        rafScheduled = true;
+        requestAnimationFrame(() => {
+            checkAllTweets();
+            rafScheduled = false;
+        });
+    }
 });
 
-domObserver.observe(document.body, { childList: true, subtree: true });
+domObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
 
-setTimeout(() => {
-    const tweets = document.querySelectorAll('[data-testid="tweet"]');
-    tweets.forEach(tweet => {
-        if (!tweet.dataset.translateObserved) {
-            tweet.dataset.translateObserved = "true";
-            visibilityObserver.observe(tweet);
-        }
-    });
-}, 1000);
+setInterval(checkAllTweets, 1000); // 作为一个后备保障

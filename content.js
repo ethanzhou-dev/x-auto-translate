@@ -87,11 +87,10 @@ function injectFakeGrokTranslation(textBox, translatedText, detectedLang) {
     
     const langName = getLangName(detectedLang);
 
-    // X 官方标准字体堆栈
     const xFontFamily = 'TwitterChirp, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 
     const header = document.createElement('div');
-    header.style.fontSize = '13px'; // 更小一点的字体
+    header.style.fontSize = '13px';
     header.style.fontFamily = xFontFamily;
     header.style.color = 'rgb(113, 118, 123)'; 
     header.style.marginBottom = '4px';
@@ -99,7 +98,6 @@ function injectFakeGrokTranslation(textBox, translatedText, detectedLang) {
     header.style.alignItems = 'center';
     header.style.lineHeight = '20px';
     
-    // 使用谷歌官方的彩色 G 图标
     const iconSvg = `
         <svg viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; margin-right: 4px; flex-shrink: 0;">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
@@ -128,7 +126,7 @@ function injectFakeGrokTranslation(textBox, translatedText, detectedLang) {
     const content = document.createElement('div');
     const computed = window.getComputedStyle(textBox);
     content.style.color = computed.color;
-    content.style.fontFamily = computed.fontFamily; // 原文正文字体也是 X 的
+    content.style.fontFamily = computed.fontFamily;
     content.style.fontSize = computed.fontSize;
     content.style.lineHeight = computed.lineHeight;
     content.style.fontWeight = computed.fontWeight;
@@ -195,7 +193,6 @@ function hideNativeTranslate(tweet) {
             (cleanText.includes('Grok') && cleanText.includes('翻译')) ||
             (cleanText.includes('Grok') && cleanText.includes('Translate'))
         ) {
-            // 绝对不能误伤我们自己注入的容器
             if (btn.closest('.x-auto-translate-container')) continue;
             if (btn.classList.contains('show-original-btn') || btn.classList.contains('action-btn')) continue;
             
@@ -204,7 +201,6 @@ function hideNativeTranslate(tweet) {
             if (parentBtn) {
                 target = parentBtn;
             } else {
-                // 如果没有明确的 button/a 容器，往上找最多 3 层，寻找包含 SVG 图标的最近父级容器（这样能把那个 Grok 图标一起干掉）
                 let curr = btn;
                 let foundWrapper = btn;
                 for (let i = 0; i < 3; i++) {
@@ -216,7 +212,6 @@ function hideNativeTranslate(tweet) {
                     }
                 }
                 target = foundWrapper;
-                // 防止误伤包含大量文本的父容器
                 if ((target.innerText || target.textContent).length > 30) {
                     target = btn.parentElement || btn;
                 }
@@ -233,16 +228,13 @@ function checkAllTweets() {
 
     const tweets = document.querySelectorAll('[data-testid="tweet"]');
     tweets.forEach(async (tweet) => {
-        // 如果这个推文已经被标记为“由原生翻译接管”，我们永远不再干涉它
         if (tweet.dataset.ignorePluginTranslate === "true") return;
 
-        // 检查是否存在原生的“显示原文”按钮（说明它已经被 X 或 Grok 自动翻译了）
         let hasNativeTranslated = false;
         const spans = tweet.querySelectorAll('[role="button"], span');
         for (let el of spans) {
             const txt = (el.innerText || el.textContent).trim();
             if (txt === '显示原文' || txt === '顯示原文' || txt === 'Show original') {
-                // 确保这不是我们自己注入的按钮
                 if (!el.classList.contains('action-btn') && !el.closest('.x-auto-translate-container')) {
                     hasNativeTranslated = true;
                     break;
@@ -252,16 +244,15 @@ function checkAllTweets() {
 
         if (hasNativeTranslated) {
             tweet.dataset.ignorePluginTranslate = "true";
-            return; // 退出，不再处理此推文
+            return;
         }
 
         if (settings.onlyComments) {
             const isStatusPage = resolveStatusPage(tweet, pageContext);
-            // 只要不是详情页（即在主时间线），就跳过。进入详情页后，包括主推文和下方的评论都进行翻译。
             if (!isStatusPage) return; 
         }
         
-        hideNativeTranslate(tweet); // 隐藏原生翻译按钮
+        hideNativeTranslate(tweet);
 
         const textBox = tweet.querySelector('[data-testid="tweetText"]');
         if (!textBox) return;
@@ -298,4 +289,4 @@ const domObserver = new MutationObserver(() => {
 
 domObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
 
-setInterval(checkAllTweets, 1000); // 作为一个后备保障
+setInterval(checkAllTweets, 1000);

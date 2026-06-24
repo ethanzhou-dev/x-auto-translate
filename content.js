@@ -286,7 +286,6 @@ function hideNativeTranslate (tweet) {
       let curr = target
       const targetText = (target.innerText || target.textContent).trim()
       
-      // 向上查找包含 SVG 的父级容器（只要文本内容一致，说明只是包裹层）
       for (let i = 0; i < 4; i++) {
         const parent = curr.parentElement
         if (!parent || parent === tweet) break

@@ -58,6 +58,80 @@ function getLangName(code) {
     return langMap[shortCode] || '未知语言';
 }
 
+function escapeHtml(unsafe) {
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+}
+
+function extractRichText(textBox) {
+    let sourceText = '';
+    const entityMap = {};
+    let entityIndex = 0;
+
+    function traverse(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            sourceText += node.textContent;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+            const tag = node.tagName.toUpperCase();
+            if (tag === 'IMG' && node.src && node.src.includes('emoji')) {
+                const marker = `{${entityIndex}}`;
+                sourceText += marker;
+                entityMap[entityIndex] = node.outerHTML;
+                entityIndex++;
+            } else if (tag === 'A') {
+                const marker = `{${entityIndex}}`;
+                sourceText += marker;
+                entityMap[entityIndex] = node.outerHTML;
+                entityIndex++;
+            } else if (tag === 'BR') {
+                sourceText += '\n';
+            } else if (tag === 'SPAN' || tag === 'DIV') {
+                for (const child of node.childNodes) {
+                    traverse(child);
+                }
+            } else {
+                const marker = `{${entityIndex}}`;
+                sourceText += marker;
+                entityMap[entityIndex] = node.outerHTML;
+                entityIndex++;
+            }
+        }
+    }
+
+    for (const child of textBox.childNodes) {
+        traverse(child);
+    }
+
+    return { sourceText: sourceText.trim(), entityMap };
+}
+
+function restoreRichText(translatedText, entityMap) {
+    let escapedText = escapeHtml(translatedText);
+    return escapedText.replace(/[{｛]\s*(\d+)\s*[}｝]/g, (match, p1, offset, string) => {
+        const index = parseInt(p1, 10);
+        if (entityMap[index]) {
+            let entity = entityMap[index];
+            if (entity.toLowerCase().startsWith('<a')) {
+                let prefix = '';
+                let suffix = '';
+                if (offset > 0 && !/[\s\n，。？！：；、,.\?!:;]/.test(string[offset - 1])) {
+                    prefix = ' ';
+                }
+                if (offset + match.length < string.length && !/[\s\n，。？！：；、,.\?!:;]/.test(string[offset + match.length])) {
+                    suffix = ' ';
+                }
+                return prefix + entity + suffix;
+            }
+            return entity;
+        }
+        return match;
+    });
+}
+
 async function translateText(text) {
     return new Promise((resolve) => {
         chrome.runtime.sendMessage({ action: 'translate', text: text, targetLang: settings.targetLang }, (response) => {
@@ -77,7 +151,7 @@ async function translateText(text) {
     });
 }
 
-function injectFakeGrokTranslation(textBox, translatedText, detectedLang) {
+function injectFakeGrokTranslation(textBox, translatedText, detectedLang, isHtml = false) {
     if (textBox.dataset.hasFakeTranslation === "true") return;
     textBox.dataset.hasFakeTranslation = "true";
 
@@ -132,7 +206,12 @@ function injectFakeGrokTranslation(textBox, translatedText, detectedLang) {
     content.style.fontWeight = computed.fontWeight;
     content.style.whiteSpace = 'pre-wrap';
     content.style.wordBreak = 'break-word';
-    content.innerText = translatedText;
+    
+    if (isHtml) {
+        content.innerHTML = translatedText;
+    } else {
+        content.innerText = translatedText;
+    }
 
     container.appendChild(header);
     container.appendChild(content);
@@ -257,19 +336,20 @@ function checkAllTweets() {
         const textBox = tweet.querySelector('[data-testid="tweetText"]');
         if (!textBox) return;
         
-        const text = textBox.innerText || textBox.textContent;
-        if (!text || text.trim() === '') return;
+        const { sourceText, entityMap } = extractRichText(textBox);
+        if (!sourceText || sourceText.trim() === '') return;
 
-        if (textBox.dataset.translatedText === text) return;
-        textBox.dataset.translatedText = text; 
+        if (textBox.dataset.translatedText === sourceText) return;
+        textBox.dataset.translatedText = sourceText; 
 
-        const result = await getCachedTranslation(text);
+        const result = await getCachedTranslation(sourceText);
         
         if (result && result.translatedText) {
             if (!result.detectedLang.startsWith('zh')) {
-                const currentText = textBox.innerText || textBox.textContent;
-                if (currentText === text) {
-                    injectFakeGrokTranslation(textBox, result.translatedText, result.detectedLang);
+                const currentExtracted = extractRichText(textBox).sourceText;
+                if (currentExtracted === sourceText) {
+                    const richHtml = restoreRichText(result.translatedText, entityMap);
+                    injectFakeGrokTranslation(textBox, richHtml, result.detectedLang, true);
                 }
             }
         }

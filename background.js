@@ -1,3 +1,4 @@
+/* global chrome */
 let edgeAuthToken = null
 let tokenExpiration = 0
 

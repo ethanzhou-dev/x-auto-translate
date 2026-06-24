@@ -1,3 +1,4 @@
+/* global chrome */
 const enableToggleEl = document.getElementById('enableToggle')
 const targetLangEl = document.getElementById('targetLang')
 const onlyCommentsEl = document.getElementById('onlyComments')

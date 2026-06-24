@@ -1,3 +1,4 @@
+/* global chrome, Node, MutationObserver */
 let settings = { enabled: true, targetLang: 'zh-CN', onlyComments: false }
 
 async function loadSettings () {
@@ -282,21 +283,6 @@ function injectFakeGrokTranslation (textBox, translatedText, detectedLang, isHtm
 
 const translationCache = new Map()
 
-async function getCachedTranslation (text) {
-  if (translationCache.has(text)) {
-    return translationCache.get(text)
-  }
-  const result = await translateText(text)
-  if (result) {
-    if (translationCache.size > 2000) {
-      const firstKey = translationCache.keys().next().value
-      translationCache.delete(firstKey)
-    }
-    translationCache.set(text, result)
-  }
-  return result
-}
-
 function hideNativeTranslate (tweet) {
   const textContent = tweet.textContent || ''
   if (!/Translate|翻译|翻譯/.test(textContent)) {
@@ -345,9 +331,7 @@ function hideNativeTranslate (tweet) {
   }
 }
 
-function doAsyncTranslate(textBox, sourceText, entityMap) {
-  if (textBox.dataset.isTranslating === 'true') return;
-  textBox.dataset.isTranslating = 'true';
+function doAsyncTranslate (textBox, sourceText, entityMap) {
   translateText(sourceText).then(result => {
     if (result && result.translatedText) {
       if (translationCache.size > 2000) {
@@ -367,8 +351,7 @@ function doAsyncTranslate(textBox, sourceText, entityMap) {
       delete textBox.dataset.translatedText
       textBox.dataset.translationFailTime = Date.now().toString()
     }
-    delete textBox.dataset.isTranslating;
-  });
+  })
 }
 
 function checkAllTweets () {
@@ -438,8 +421,17 @@ function checkAllTweets () {
   })
 }
 
-const domObserver = new MutationObserver(() => {
-  checkAllTweets()
+const domObserver = new MutationObserver((mutations) => {
+  let hasNewNodes = false
+  for (const m of mutations) {
+    if (m.addedNodes.length > 0) {
+      hasNewNodes = true
+      break
+    }
+  }
+  if (hasNewNodes) {
+    checkAllTweets()
+  }
 })
 
-domObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true })
+domObserver.observe(document.documentElement, { childList: true, subtree: true })

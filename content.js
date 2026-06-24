@@ -392,7 +392,7 @@ function checkAllTweets () {
 
     if (textBox.dataset.translatedText === sourceText) return
     const failTime = parseInt(textBox.dataset.translationFailTime || '0', 10)
-    if (Date.now() - failTime < 10000) return // Wait 10 seconds before retrying on failure
+    if (Date.now() - failTime < 10000) return
 
     textBox.dataset.translatedText = sourceText
 

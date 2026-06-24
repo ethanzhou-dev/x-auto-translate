@@ -233,6 +233,28 @@ function checkAllTweets() {
 
     const tweets = document.querySelectorAll('[data-testid="tweet"]');
     tweets.forEach(async (tweet) => {
+        // 如果这个推文已经被标记为“由原生翻译接管”，我们永远不再干涉它
+        if (tweet.dataset.ignorePluginTranslate === "true") return;
+
+        // 检查是否存在原生的“显示原文”按钮（说明它已经被 X 或 Grok 自动翻译了）
+        let hasNativeTranslated = false;
+        const spans = tweet.querySelectorAll('[role="button"], span');
+        for (let el of spans) {
+            const txt = (el.innerText || el.textContent).trim();
+            if (txt === '显示原文' || txt === '顯示原文' || txt === 'Show original') {
+                // 确保这不是我们自己注入的按钮
+                if (!el.classList.contains('action-btn') && !el.closest('.x-auto-translate-container')) {
+                    hasNativeTranslated = true;
+                    break;
+                }
+            }
+        }
+
+        if (hasNativeTranslated) {
+            tweet.dataset.ignorePluginTranslate = "true";
+            return; // 退出，不再处理此推文
+        }
+
         if (settings.onlyComments) {
             const isStatusPage = resolveStatusPage(tweet, pageContext);
             // 只要不是详情页（即在主时间线），就跳过。进入详情页后，包括主推文和下方的评论都进行翻译。

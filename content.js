@@ -98,7 +98,7 @@ function getLangName (code) {
   try {
     const languageNames = new Intl.DisplayNames(['zh-CN'], { type: 'language' })
     return languageNames.of(shortCode)
-  } catch (e) {
+  } catch {
     return '未知语言'
   }
 }

@@ -1,4 +1,4 @@
-# X Auto Translator
+# X Auto Translate
 
 用于在 X (Twitter) 中自动将外语推文和评论翻译为目标语言的浏览器插件。
 

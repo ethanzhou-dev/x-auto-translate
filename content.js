@@ -1,11 +1,16 @@
 /* global chrome, Node, MutationObserver */
 let settings = { enabled: true, targetLang: 'zh-CN', onlyComments: false }
 
+function isExtensionAlive () {
+  return !!chrome.runtime?.id
+}
+
 async function loadSettings () {
   settings = await chrome.storage.local.get({ enabled: true, targetLang: 'zh-CN', onlyComments: false })
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {
+  if (!isExtensionAlive()) return
   if (area === 'local') {
     if (changes.enabled) settings.enabled = changes.enabled.newValue
     if (changes.targetLang) settings.targetLang = changes.targetLang.newValue
@@ -354,11 +359,13 @@ function doAsyncTranslate (textBox, sourceText, entityMap) {
   })
 }
 
-function checkAllTweets () {
+function checkAllTweets (specificTweets = null) {
   if (!settings.enabled) return
   const pageContext = getPageContext()
 
-  const tweets = document.querySelectorAll('[data-testid="tweet"]')
+  const tweets = specificTweets || document.querySelectorAll('[data-testid="tweet"]')
+  if (!tweets || tweets.length === 0) return
+
   tweets.forEach((tweet) => {
     if (tweet.dataset.ignorePluginTranslate === 'true') return
 
@@ -422,15 +429,38 @@ function checkAllTweets () {
 }
 
 const domObserver = new MutationObserver((mutations) => {
-  let hasNewNodes = false
-  for (const m of mutations) {
-    if (m.addedNodes.length > 0) {
-      hasNewNodes = true
-      break
+  if (!isExtensionAlive()) {
+    domObserver.disconnect()
+    return
+  }
+
+  const pendingTweets = new Set()
+
+  for (const mutation of mutations) {
+    for (const node of mutation.addedNodes) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (node.getAttribute('data-testid') === 'tweet') {
+          pendingTweets.add(node)
+        } else if (node.querySelector) {
+          const innerTweets = node.querySelectorAll('[data-testid="tweet"]')
+          innerTweets.forEach(t => pendingTweets.add(t))
+        }
+      }
+    }
+
+    if (mutation.target) {
+      const el = mutation.target.nodeType === Node.ELEMENT_NODE ? mutation.target : mutation.target.parentElement
+      if (el && el.closest) {
+        const closestTweet = el.closest('[data-testid="tweet"]')
+        if (closestTweet) {
+          pendingTweets.add(closestTweet)
+        }
+      }
     }
   }
-  if (hasNewNodes) {
-    checkAllTweets()
+
+  if (pendingTweets.size > 0) {
+    checkAllTweets(Array.from(pendingTweets))
   }
 })
 
